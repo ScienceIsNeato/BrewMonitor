@@ -1,0 +1,48 @@
+#!/bin/sh
+
+
+SCRIPT="/usr/local/beerbin/temp_pressure.sh"
+
+init(){
+  chmod 666 /sys/module/i2c_bcm2708/parameters/combined
+  echo -n 1 > /sys/module/i2c_bcm2708/parameters/combined
+  pid=""
+}
+
+get_pid(){
+   pid=`ps aux | grep temp_pressure.sh | grep -v grep | awk {'print $2'}`
+}
+
+
+start(){
+   init
+   get_pid
+   [ -n "$pid" ] && echo "process already started"
+   `$SCRIPT >/dev/null 2>&1 < /dev/null &`
+}
+
+stop(){
+   get_pid
+   [ -z "$pid" ] && echo "no process running" && exit 1
+   kill $pid
+
+}
+
+
+case $1 in
+        start)
+                start
+                ;;
+        stop)
+                stop
+                ;;
+        restart|reload)
+                $0 stop && sleep 2 && $0 start
+                ;;
+        *)
+                
+            echo "Usage: $0 {start|stop|restart|condrestart|status}"
+            exit 1
+ 
+esac
+
