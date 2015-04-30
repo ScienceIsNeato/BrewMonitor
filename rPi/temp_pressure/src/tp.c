@@ -20,7 +20,8 @@ int set_register(int file, uint8_t addr, uint8_t reg,  uint8_t value)
   packets.nmsgs = 1;
   
   if(ioctl(file,I2C_RDWR, &packets)< 0){
-     perror("unable to send data packet in function set_register");
+     openlog("temp_pressure", LOG_PID|LOG_CONS, LOG_USER);
+     syslog(LOG_ERR,"unable to send data packet in function set_register");
      return 1;
   }
   return 0;
@@ -48,7 +49,8 @@ static int get_i2c_register(int file, unsigned char addr, unsigned char reg, uns
   packets.nmsgs = 2;
   
   if(ioctl(file,I2C_RDWR, &packets)<0){
-    perror("unable to send packet in get_i2c_register");  
+    openlog("temp_pressure", LOG_PID|LOG_CONS, LOG_USER);
+    syslog(LOG_ERR,"unable to send packet in get_i2c_register");  
     return 1;  
   } 
   *value=inbuf; 
@@ -63,7 +65,8 @@ void begin(int file)
    get_i2c_register(file, (unsigned char)MPL3115A2_ADDRESS, (unsigned char)MPL3115A2_WHOAMI, &value);
 //   printf("This is value of whomai is %d\n", value);
    if(value !=0xC4)  {
-       printf("whoami value is incorrect");
+       openlog("temp_pressure", LOG_PID|LOG_CONS,LOG_USER);
+       syslog(LOG_WARNING,"whoami value is incorrect");
        return;
    }
    
@@ -86,6 +89,9 @@ void begin(int file)
 void get_current_temp(int file)
 {
    unsigned char value=0x00;
+   float temp_min, temp_max;
+   temp_min=184.0;
+   temp_max=56.7+273.15;
    while(! (value & MPL3115A2_REGISTER_STATUS_TDR)){
       get_i2c_register(file,(unsigned char)MPL3115A2_ADDRESS,(unsigned char)MPL3115A2_REGISTER_STATUS, &value);
       usleep(10000);
@@ -107,14 +113,22 @@ void get_current_temp(int file)
    temp=temp | t_lsb;
 //   printf("temp = %d\n",temp);
    float tmp=(float)temp;
-   tmp=tmp/16.0; 
-   printf("temperature=%g \n", tmp);   
-
+   tmp=tmp/16.0+273.15;
+   if(temp_min<tmp && tmp<temp_max){
+      printf("temperature=%g \n", tmp);   
+   }else{
+      openlog("temp_pressure", LOG_PID|LOG_CONS, LOG_USER);
+      syslog(LOG_ERR, "invalid temperature reading from the MPL3115A2");
+   }
 }
+
 
 void get_current_pressure(int file)
 {
    unsigned char value;
+   float pressure_max,pressure_min;
+   pressure_max=108500.0;
+   pressure_min=87000.0;
    value=(unsigned char)(MPL3115A2_CTRL_REG1_SBYB |
                         MPL3115A2_CTRL_REG1_OS128 | MPL3115A2_CTRL_REG1_BAR);
    set_register(file,(unsigned char)MPL3115A2_ADDRESS,(unsigned char)MPL3115A2_CTRL_REG1,value);
@@ -139,7 +153,12 @@ void get_current_pressure(int file)
    p=p>>4;
    pressure=(float)p;
    pressure=pressure*0.25E0;
-   printf("pressure=%g\n",pressure);
+   if(pressure_min < pressure && pressure < pressure_max){
+      printf("pressure=%g\n",pressure);
+   }else{
+      openlog("temp_pressure", LOG_PID|LOG_CONS, LOG_USER);
+      syslog(LOG_ERR, "invalid pressure reading from the MPL3115A2");
+   }
 }   
 
    
